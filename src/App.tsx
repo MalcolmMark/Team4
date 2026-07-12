@@ -2282,37 +2282,204 @@ function UsersRoles() {
 // ─── USSD Simulator ───────────────────────────────────────────────────────────
 
 function USSDSimulator() {
-  const [step, setStep] = useState(0)
-  const [input, setInput] = useState('')
-  const [history, setHistory] = useState<string[]>([])
+  type UssdScreen = 'menu' | 'report-menu' | 'phone-entry' | 'block-options' | 'success' | 'status-entry' | 'status-result' | 'safety-info' | 'exit'
+  type ReportType = 'Unknown Transaction' | 'PIN Request' | 'SIM Swap Suspicion' | 'Stolen Phone' | 'Fraudulent Transaction'
 
-  const screens = [
-    { content: 'MoMo FraudLink Uganda\n*284*90#\n\n1. Report Suspected Fraud\n2. Check Report Status\n3. Mobile Money Safety Information\n4. Exit', prompt: 'Enter choice:' },
-    { content: 'Report Suspected Fraud\n\n1. Unknown Transaction\n2. PIN Request\n3. SIM-Swap Suspicion\n4. Stolen Phone\n5. Fraudulent Transfer\n\n0. Back', prompt: 'Enter choice:' },
-    { content: 'Enter Transaction Reference\n(or leave blank if unknown)\n\n0. Back', prompt: 'Transaction ref:' },
-    { content: 'Select Provider\n\n1. MTN Mobile Money Uganda Limited\n2. Airtel Mobile Commerce Uganda Limited\n3. Stanbic Bank Uganda Limited\n4. Centenary Rural Development Bank Limited\n\n0. Back', prompt: 'Enter choice:' },
-    { content: 'Confirm Report\n\nType: Unknown Transaction\nReference: TXN-2026-881244\n\nThis report will be sent to your provider for verification before submission to the shared fraud intelligence platform.\n\n1. Confirm\n2. Cancel', prompt: 'Enter choice:' },
-    { content: 'Report Submitted\n\nYour report reference: RPT-2026-443821\n\nYour institution will verify this report within 24 hours. You will receive an SMS notification.\n\nThank you for helping protect Uganda\'s financial system.', prompt: '' },
+  const [screen, setScreen] = useState<UssdScreen>('menu')
+  const [input, setInput] = useState('')
+  const [phoneNumber, setPhoneNumber] = useState('')
+  const [reportType, setReportType] = useState<ReportType>('Unknown Transaction')
+  const [reportRef, setReportRef] = useState('RPT-2026-443821')
+  const [transactionsBlocked, setTransactionsBlocked] = useState(false)
+  const [statusLookup, setStatusLookup] = useState('')
+  const [error, setError] = useState('')
+
+  const providerPrefixes: Record<string, string> = {
+    '070': 'Airtel Mobile Commerce Uganda Limited',
+    '074': 'Airtel Mobile Commerce Uganda Limited',
+    '075': 'Airtel Mobile Commerce Uganda Limited',
+    '076': 'MTN Mobile Money Uganda Limited',
+    '077': 'MTN Mobile Money Uganda Limited',
+    '078': 'MTN Mobile Money Uganda Limited',
+  }
+
+  const reportOptions: ReportType[] = [
+    'Unknown Transaction',
+    'PIN Request',
+    'SIM Swap Suspicion',
+    'Stolen Phone',
+    'Fraudulent Transaction',
   ]
 
+  const highRiskReportTypes: ReportType[] = ['SIM Swap Suspicion', 'Stolen Phone']
+
+  const normalizePhone = (value: string) => {
+    let digits = value.replace(/\D/g, '')
+    if (digits.startsWith('256') && digits.length === 12) digits = `0${digits.slice(3)}`
+    return digits
+  }
+
+  const detectProvider = (value: string) => providerPrefixes[normalizePhone(value).slice(0, 3)] || ''
+  const provider = detectProvider(phoneNumber)
+  const isHighRiskReport = highRiskReportTypes.includes(reportType)
+
+  const generateReportRef = () => `RPT-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`
+
+  const resetSimulator = () => {
+    setScreen('menu')
+    setInput('')
+    setPhoneNumber('')
+    setReportType('Unknown Transaction')
+    setReportRef('RPT-2026-443821')
+    setTransactionsBlocked(false)
+    setStatusLookup('')
+    setError('')
+  }
+
+  const setNextScreen = (nextScreen: UssdScreen) => {
+    setScreen(nextScreen)
+    setInput('')
+    setError('')
+  }
+
   const handleSubmit = () => {
-    if (step < screens.length - 1) {
-      setHistory([...history, `${screens[step].prompt} ${input}`])
-      setInput('')
-      setStep(s => Math.min(s + 1, screens.length - 1))
+    const value = input.trim()
+    setError('')
+
+    switch (screen) {
+      case 'menu':
+        if (value === '1') return setNextScreen('report-menu')
+        if (value === '2') return setNextScreen('status-entry')
+        if (value === '3') return setNextScreen('safety-info')
+        if (value === '4') return setNextScreen('exit')
+        setError('Enter 1, 2, 3, or 4.')
+        return
+
+      case 'report-menu': {
+        if (value === '0') return setNextScreen('menu')
+        const selectedReport = reportOptions[Number(value) - 1]
+        if (selectedReport) {
+          setReportType(selectedReport)
+          return setNextScreen('phone-entry')
+        }
+        setError('Enter a valid report type from 1 to 5, or 0 to go back.')
+        return
+      }
+
+      case 'phone-entry': {
+        if (value === '0') return setNextScreen('report-menu')
+        const normalized = normalizePhone(value)
+        const detectedProvider = detectProvider(normalized)
+        if (normalized.length !== 10 || !normalized.startsWith('07')) {
+          setError('Enter a valid Ugandan mobile number, for example 0771234567.')
+          return
+        }
+        if (!detectedProvider) {
+          setError('We could not detect the provider for that number. Check the number and try again.')
+          return
+        }
+        setPhoneNumber(normalized)
+        return setNextScreen('block-options')
+      }
+
+      case 'block-options':
+        if (value === '0') return setNextScreen('phone-entry')
+        if (value === '1' || value === '2') {
+          setTransactionsBlocked(value === '1')
+          setReportRef(generateReportRef())
+          return setNextScreen('success')
+        }
+        setError('Enter 1 to block transactions, 2 to report only, or 0 to go back.')
+        return
+
+      case 'status-entry':
+        if (value === '0') return setNextScreen('menu')
+        if (!value) {
+          setError('Enter a report reference or phone number.')
+          return
+        }
+        setStatusLookup(value)
+        return setNextScreen('status-result')
+
+      case 'status-result':
+      case 'safety-info':
+        if (value === '0') return setNextScreen('menu')
+        setError('Enter 0 to return to the main menu.')
+        return
+
+      case 'success':
+      case 'exit':
+        resetSimulator()
+        return
+
+      default:
+        return
     }
   }
 
-  const curr = screens[Math.min(step, screens.length - 1)]
+  const getCurrentScreen = () => {
+    switch (screen) {
+      case 'menu':
+        return {
+          content: 'MoMo FraudLink Uganda\n*284*90#\n\n1. Report Suspected Fraud\n2. Check Report Status\n3. Mobile Money Safety Information\n4. Exit',
+          prompt: 'Enter choice:',
+        }
+      case 'report-menu':
+        return {
+          content: 'Report Suspected Fraud\n\n' + reportOptions.map((option, index) => String(index + 1) + '. ' + option).join('\n') + '\n\n0. Back',
+          prompt: 'Enter choice:',
+        }
+      case 'phone-entry':
+        return {
+          content: `${reportType}\n\nEnter the mobile money phone number linked to the affected account.\n\nThe system will detect the provider automatically.\n\n0. Back`,
+          prompt: 'Phone number:',
+        }
+      case 'block-options':
+        return {
+          content: 'Provider Detected\n\nPhone: ' + phoneNumber + '\nProvider: ' + provider + '\nReport type: ' + reportType + '\n\n' + (isHighRiskReport ? 'Recommended action: block transactions immediately while the provider verifies ownership.' : 'You can block transactions if you believe money is at immediate risk.') + '\n\n1. Block all mobile money transactions\n2. Submit report without blocking\n\n0. Back',
+          prompt: 'Enter choice:',
+        }
+      case 'success':
+        return {
+          content: `Request Submitted\n\nReport reference: ${reportRef}\nType: ${reportType}\nPhone: ${phoneNumber}\nProvider: ${provider}\n\n${transactionsBlocked ? 'All mobile money transactions have been blocked pending provider verification.' : 'Your report has been submitted for provider verification. Transactions remain active until the provider takes action.'}\n\nFor further help, visit the nearest service centre with valid identification for assistance.`,
+          prompt: '',
+        }
+      case 'status-entry':
+        return {
+          content: 'Check Report Status\n\nEnter your report reference or the affected phone number.\n\n0. Back',
+          prompt: 'Reference or phone:',
+        }
+      case 'status-result':
+        return {
+          content: `Report Status\n\nLookup: ${statusLookup}\nStatus: Received by provider\nNext step: provider verification\n\nIf your phone was stolen, your SIM was swapped, or you cannot access the number, visit the nearest service centre with valid identification.\n\n0. Main menu`,
+          prompt: 'Enter choice:',
+        }
+      case 'safety-info':
+        return {
+          content: 'Mobile Money Safety Information\n\n- Never share your PIN or OTP.\n- Providers will not ask for your PIN by phone.\n- If your phone is stolen, block transactions immediately.\n- If your SIM stops working unexpectedly, report possible SIM swap.\n- Confirm the recipient name before sending money.\n- Visit a service centre if you lose access to your SIM.\n\n0. Main menu',
+          prompt: 'Enter choice:',
+        }
+      case 'exit':
+        return {
+          content: 'Thank you for using MoMo FraudLink Uganda.\n\nFor urgent mobile money help, visit the nearest service centre for assistance.',
+          prompt: '',
+        }
+      default:
+        return { content: '', prompt: '' }
+    }
+  }
+
+  const curr = getCurrentScreen()
+  const canStartAgain = screen === 'success' || screen === 'exit'
 
   return (
     <div style={{ padding: 28 }}>
-      <SectionHeader title="USSD Fraud-Reporting Simulator" subtitle="Optional consumer-reporting input channel" />
+      <SectionHeader title="USSD Fraud-Reporting Simulator" subtitle="Consumer protection flow for suspicious activity, SIM swaps, and stolen phones" />
 
       <div style={{ background: '#fff7ed', border: '1px solid #fde68a', borderRadius: 6, padding: 12, marginBottom: 24, display: 'flex', gap: 10, maxWidth: 700 }}>
         <Info size={15} color="#D97706" style={{ flexShrink: 0, marginTop: 1 }} />
         <div style={{ fontSize: 13, color: '#92400e', lineHeight: 1.5 }}>
-          <strong>Optional consumer-reporting input.</strong> Reports must be verified by the customer's institution before being submitted to the shared fraud-intelligence exchange. Customer identity is handled by the owning institution only.
+          <strong>Consumer protection input.</strong> A user selects the fraud scenario, enters the affected phone number, gets routed to the detected provider, and can request a temporary mobile-money transaction block while the provider verifies the case.
         </div>
       </div>
 
@@ -2331,12 +2498,17 @@ function USSDSimulator() {
                   {/* Signal bars */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontSize: 10, color: '#666', fontFamily: 'monospace' }}>
                     <span>MTN UG</span>
-                    <span>▪▪▪▪ 3G</span>
-                    <span>🔋 84%</span>
+                    <span>|||| 3G</span>
+                    <span>84%</span>
                   </div>
                   <div style={{ background: '#0f1419', borderRadius: 6, padding: 12, minHeight: 280, whiteSpace: 'pre-wrap', fontFamily: 'JetBrains Mono', fontSize: 11, color: '#e8f4f8', lineHeight: 1.7 }}>
                     {curr.content}
                   </div>
+                  {error && (
+                    <div style={{ marginTop: 8, border: '1px solid #7f1d1d', background: '#2a1010', borderRadius: 4, padding: '7px 8px', fontFamily: 'JetBrains Mono', fontSize: 10, color: '#fecaca', lineHeight: 1.5 }}>
+                      {error}
+                    </div>
+                  )}
                 </div>
                 {curr.prompt && (
                   <div style={{ marginTop: 12 }}>
@@ -2351,8 +2523,8 @@ function USSDSimulator() {
                     </button>
                   </div>
                 )}
-                {step === screens.length - 1 && (
-                  <button onClick={() => { setStep(0); setHistory([]) }} style={{ marginTop: 10, width: '100%', background: 'transparent', border: '1px solid #333', borderRadius: 4, padding: '6px', color: '#666', fontSize: 11, cursor: 'pointer', fontFamily: 'JetBrains Mono' }}>
+                {canStartAgain && (
+                  <button onClick={resetSimulator} style={{ marginTop: 10, width: '100%', background: 'transparent', border: '1px solid #333', borderRadius: 4, padding: '6px', color: '#888', fontSize: 11, cursor: 'pointer', fontFamily: 'JetBrains Mono' }}>
                     Start again
                   </button>
                 )}
@@ -2371,11 +2543,11 @@ function USSDSimulator() {
           <div className="card" style={{ padding: 20, marginBottom: 16 }}>
             <div style={{ fontFamily: 'Manrope', fontWeight: 700, fontSize: 14, color: '#12324A', marginBottom: 12 }}>How it works</div>
             {[
-              { n: 1, text: 'Customer dials *284*90# and selects report type' },
-              { n: 2, text: 'Report is submitted to the customer\'s own institution' },
-              { n: 3, text: 'Institution verifies the report against internal records' },
-              { n: 4, text: 'If verified, institution submits to the shared fraud-intelligence exchange using the API' },
-              { n: 5, text: 'Platform processes and checks for cross-institution matches' },
+              { n: 1, text: 'Customer dials *284*90# and chooses Report Suspected Fraud, status lookup, or safety information' },
+              { n: 2, text: 'For a report, the customer selects Unknown Transaction, PIN Request, SIM Swap, Stolen Phone, or Fraudulent Transaction' },
+              { n: 3, text: 'Customer enters the affected phone number, and the system detects the provider automatically' },
+              { n: 4, text: 'The request is routed to the detected provider for verification and action' },
+              { n: 5, text: 'Customer can request a temporary block on all mobile money transactions and is directed to the nearest service centre' },
             ].map(({ n, text }) => (
               <div key={n} style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
                 <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#0F938A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -2387,12 +2559,15 @@ function USSDSimulator() {
           </div>
           <div className="card" style={{ padding: 20 }}>
             <div style={{ fontFamily: 'Manrope', fontWeight: 700, fontSize: 14, color: '#12324A', marginBottom: 10 }}>Report Categories</div>
-            {['Unknown Transaction', 'PIN Request', 'SIM-Swap Suspicion', 'Stolen Phone', 'Fraudulent Transfer'].map((c, i) => (
+            {reportOptions.map((c, i) => (
               <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #f0f4f8', fontSize: 13, color: '#12324A' }}>
                 <span style={{ width: 18, height: 18, borderRadius: '50%', background: '#F5F7FA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#667085', flexShrink: 0 }}>{i + 1}</span>
                 {c}
               </div>
             ))}
+            <div style={{ marginTop: 14, borderTop: '1px solid #f0f4f8', paddingTop: 12, fontSize: 12.5, color: '#667085', lineHeight: 1.6 }}>
+              Provider detection happens automatically from the submitted phone number. SIM swap and stolen-phone reports recommend immediate transaction blocking.
+            </div>
           </div>
         </div>
       </div>
@@ -2400,8 +2575,7 @@ function USSDSimulator() {
   )
 }
 
-// ─── Settings (placeholder) ───────────────────────────────────────────────────
-
+// Settings (placeholder)
 function SettingsScreen() {
   return (
     <div style={{ padding: 28, maxWidth: 700 }}>
