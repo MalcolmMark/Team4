@@ -16,6 +16,7 @@ import {
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
   AreaChart, Area
 } from 'recharts'
+import { api, AuthUser, clearSession, connectEvents, login } from './lib/api'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -254,17 +255,22 @@ function SectionHeader({ title, subtitle, actions }: { title: string; subtitle?:
 
 // ─── Login Screen ────────────────────────────────────────────────────────────
 
-function LoginScreen({ onLogin }: { onLogin: (role: Role, inst: string) => void }) {
+function LoginScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [institution, setInstitution] = useState('MTN Mobile Money Uganda Limited')
   const [isBoU, setIsBoU] = useState(false)
   const [role, setRole] = useState<Role>('fraud-analyst')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    onLogin(role, isBoU ? 'Bank of Uganda' : institution)
+    setError(''); setLoading(true)
+    try { onLogin(await login(email, password)) }
+    catch (err) { setError(err instanceof Error ? err.message : 'Sign-in failed.') }
+    finally { setLoading(false) }
   }
 
   return (
@@ -297,7 +303,7 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role, inst: string) => void 
           </div>
         </div>
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 20, fontSize: 11.5, color: '#667085' }}>
-          Prototype for Uganda's regulated financial ecosystem · Demonstration environment
+          Standards-aligned prototype · ISO/IEC 27001 · 27701 · 27035 · Demonstration environment
         </div>
       </div>
 
@@ -321,6 +327,7 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role, inst: string) => void 
           </div>
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {error && <div style={{ padding: 10, borderRadius: 6, background: '#fef2f2', color: '#991b1b', fontSize: 13 }}>{error}</div>}
             {!isBoU && (
               <div>
                 <label style={{ fontSize: 12.5, fontWeight: 600, color: '#12324A', display: 'block', marginBottom: 6 }}>Service Provider or Financial Institution</label>
@@ -364,15 +371,15 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role, inst: string) => void 
               </label>
               <button type="button" style={{ fontSize: 13, color: '#0F938A', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500 }}>Forgot password?</button>
             </div>
-            <button type="submit" className="btn-primary" style={{ justifyContent: 'center', padding: '11px 18px', fontSize: 14, marginTop: 4 }}>
-              <Lock size={15} /> Sign in
+            <button type="submit" disabled={loading} className="btn-primary" style={{ justifyContent: 'center', padding: '11px 18px', fontSize: 14, marginTop: 4 }}>
+              <Lock size={15} /> {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
 
           <div style={{ marginTop: 24, padding: 14, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, display: 'flex', gap: 10 }}>
             <AlertTriangle size={16} color="#D97706" style={{ flexShrink: 0, marginTop: 1 }} />
             <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>
-              <strong>Prototype only.</strong> Institution names and user accounts are demonstration data and do not represent live integrations or endorsements.
+              <strong>Synthetic, standards-aligned demo.</strong> References ISO/IEC 27001, 27701, 29100 and 27035 principles; no certification or production institution connection is claimed.
             </div>
           </div>
         </div>
@@ -860,11 +867,37 @@ function SubmitIntelligence({ appState }: { appState: AppState }) {
     confirm1: false, confirm2: false, confirm3: false,
   })
   const [submitted, setSubmitted] = useState(false)
+  const [backendState, setBackendState] = useState<{ status: string; message?: string; incident_ref?: string; protected_subject_ref?: string; schema_version?: string; submission_timestamp?: string; reporting_institution?: string; initial_risk_level?: string; match_status?: string; alert_ref?: string; audit_event_ref?: string } | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
 
-  const protectedRef = 'SUBJ_8F92A7B4C91D4E16'
-  const incidentRef = 'FL-UG-2026-000245'
+  const handleSubmit = async () => {
+    setIsSubmitting(true)
+    setSubmitError('')
 
-  if (submitted) {
+    try {
+      const riskScore = form.riskLevel === 'Critical' ? 90 : form.riskLevel === 'High' ? 75 : form.riskLevel === 'Medium' ? 45 : 20
+      const data = await api<{ incident_reference: string; protected_reference: string; risk_level: string; created_at: string; reporting_institution: string }>('/incidents', {
+        method: 'POST',
+        body: JSON.stringify({
+          subject_type: 'MSISDN', identifier: form.walletId, fraud_type: form.fraudType,
+          indicator_codes: ['MULTIPLE_FRAUD_REPORTS', 'FRAUD_RELATED_CALLS', 'SUSPICIOUS_TRANSACTIONS'],
+          institution_risk_score: riskScore, confidence: form.confidenceLevel === 'High' ? 95 : 75,
+          institution_decision: 'BLOCKED', evidence_summary: { analyst_reference: form.ref, description: form.description },
+          detected_at: `${form.detectionDate}T${form.detectionTime}:00Z`,
+        }),
+      })
+      setBackendState({ status: 'accepted', message: 'Fraud intelligence stored; background correlation is running.', incident_ref: data.incident_reference, protected_subject_ref: data.protected_reference, schema_version: '1.0', submission_timestamp: data.created_at, reporting_institution: data.reporting_institution, initial_risk_level: data.risk_level, match_status: 'CORRELATION STARTED' })
+      setSubmitted(true)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to reach the backend service.'
+      setSubmitError(message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (submitted && backendState) {
     return (
       <div style={{ padding: 28, maxWidth: 700, margin: '0 auto' }}>
         <div className="card" style={{ padding: 40, textAlign: 'center' }}>
@@ -876,14 +909,14 @@ function SubmitIntelligence({ appState }: { appState: AppState }) {
 
           <div style={{ background: '#F5F7FA', borderRadius: 8, padding: 20, textAlign: 'left', marginBottom: 24 }}>
             {[
-              ['Incident Reference', incidentRef],
-              ['Protected Subject Reference', protectedRef],
-              ['Schema Version', '1.0'],
-              ['Submission Timestamp', '2026-07-11T14:32:18+03:00'],
-              ['Reporting Institution', appState.institution],
-              ['Initial Risk Level', 'HIGH'],
-              ['Match Check Status', 'MATCH DETECTED — Alert ALT-2026-00891 generated'],
-              ['Audit Event Reference', 'AUD-2026-88412'],
+              ['Incident Reference', backendState.incident_ref || 'Pending'],
+              ['Protected Subject Reference', backendState.protected_subject_ref || 'Pending'],
+              ['Schema Version', backendState.schema_version || '1.0'],
+              ['Submission Timestamp', backendState.submission_timestamp || 'Pending'],
+              ['Reporting Institution', backendState.reporting_institution || appState.institution],
+              ['Initial Risk Level', backendState.initial_risk_level || 'UNKNOWN'],
+              ['Match Check Status', `${backendState.match_status || 'PENDING'} — Alert ${backendState.alert_ref || 'pending'} generated`],
+              ['Audit Event Reference', backendState.audit_event_ref || 'Pending'],
             ].map(([k, v]) => (
               <div key={k} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '8px 0', borderBottom: '1px solid #e8eef3' }}>
                 <div style={{ fontSize: 12, color: '#667085', minWidth: 200, flexShrink: 0 }}>{k}</div>
@@ -894,11 +927,11 @@ function SubmitIntelligence({ appState }: { appState: AppState }) {
 
           <div style={{ background: '#fff7ed', border: '1px solid #fde68a', borderRadius: 6, padding: 12, marginBottom: 24, textAlign: 'left', display: 'flex', gap: 10 }}>
             <AlertTriangle size={16} color="#D97706" style={{ flexShrink: 0, marginTop: 1 }} />
-            <div style={{ fontSize: 12.5, color: '#92400e' }}>A cross-institution match was detected. Alert <strong>ALT-2026-00891</strong> has been generated and assigned for investigation.</div>
+            <div style={{ fontSize: 12.5, color: '#92400e' }}>{backendState.message || 'A cross-institution match was detected and routed for investigation.'}</div>
           </div>
 
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-            <button className="btn-secondary" onClick={() => { setSubmitted(false); setStep(1) }}>Submit Another</button>
+            <button className="btn-secondary" onClick={() => { setSubmitted(false); setStep(1); setBackendState(null); setSubmitError('') }}>Submit Another</button>
             <button className="btn-primary">View Incident</button>
           </div>
         </div>
@@ -1096,9 +1129,9 @@ function SubmitIntelligence({ appState }: { appState: AppState }) {
               Next <ArrowRight size={14} />
             </button>
           ) : (
-            <button className="btn-primary" onClick={() => setSubmitted(true)} disabled={!form.confirm1 || !form.confirm2 || !form.confirm3}
-              style={{ opacity: (!form.confirm1 || !form.confirm2 || !form.confirm3) ? 0.5 : 1 }}>
-              <Send size={14} />Submit Fraud Intelligence
+            <button className="btn-primary" onClick={handleSubmit} disabled={!form.confirm1 || !form.confirm2 || !form.confirm3 || isSubmitting}
+              style={{ opacity: (!form.confirm1 || !form.confirm2 || !form.confirm3 || isSubmitting) ? 0.5 : 1 }}>
+              <Send size={14} />{isSubmitting ? 'Submitting…' : 'Submit Fraud Intelligence'}
             </button>
           )}
         </div>
@@ -1113,8 +1146,16 @@ function AlertsList({ onNavigate }: { onNavigate: (s: Screen) => void }) {
   const [filterRisk, setFilterRisk] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [search, setSearch] = useState('')
+  const [alerts, setAlerts] = useState(SAMPLE_ALERTS)
+  const [loadError, setLoadError] = useState('')
 
-  const filtered = SAMPLE_ALERTS.filter(a => {
+  useEffect(() => {
+    api<Array<{ id: number; alert_reference: string; risk_level: string; relationship_type: string; indicator_codes: string[]; reporting_institution?: string; created_at: string; status: string }>>('/alerts')
+      .then(rows => setAlerts(rows.map(a => ({ id: a.id, ref: a.alert_reference, risk: a.risk_level[0] + a.risk_level.slice(1).toLowerCase(), type: a.relationship_type.replace(/_/g, ' '), matchReason: `Linked to incident reported by ${a.reporting_institution || 'another institution'}`, indicators: a.indicator_codes.length, institutions: 2, generatedAt: new Date(a.created_at).toLocaleString(), analyst: 'Unassigned', status: a.status.replace(/_/g, ' ') })) as typeof SAMPLE_ALERTS))
+      .catch(error => setLoadError(error instanceof Error ? error.message : 'Alerts could not be loaded.'))
+  }, [])
+
+  const filtered = alerts.filter(a => {
     const matchRisk = !filterRisk || a.risk === filterRisk
     const matchStatus = !filterStatus || a.status === filterStatus
     const matchSearch = !search || a.ref.toLowerCase().includes(search.toLowerCase()) || a.type.toLowerCase().includes(search.toLowerCase())
@@ -1128,6 +1169,7 @@ function AlertsList({ onNavigate }: { onNavigate: (s: Screen) => void }) {
         subtitle="Cross-institution fraud matches and risk signals"
         actions={<button className="btn-secondary"><Download size={14} />Export</button>}
       />
+      {loadError && <div style={{ marginBottom: 14, padding: 10, background: '#fef2f2', color: '#991b1b', borderRadius: 6 }}>{loadError}</div>}
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flex: '1 1 240px', maxWidth: 320 }}>
@@ -1157,7 +1199,7 @@ function AlertsList({ onNavigate }: { onNavigate: (s: Screen) => void }) {
             </thead>
             <tbody>
               {filtered.map((a, i) => (
-                <tr key={i} className="table-row" style={{ borderTop: '1px solid #f0f4f8', cursor: 'pointer' }} onClick={() => onNavigate('alert-detail')}>
+                <tr key={i} className="table-row" style={{ borderTop: '1px solid #f0f4f8', cursor: 'pointer' }} onClick={() => { sessionStorage.setItem('selected_alert_id', String((a as typeof a & { id?: number }).id || '')); onNavigate('alert-detail') }}>
                   <td style={{ padding: '13px 14px', fontSize: 12.5, fontFamily: 'JetBrains Mono', color: '#12324A', fontWeight: 600 }}>{a.ref}</td>
                   <td style={{ padding: '13px 14px' }}><RiskBadge level={a.risk} /></td>
                   <td style={{ padding: '13px 14px', fontSize: 13, color: '#12324A' }}>{a.type}</td>
@@ -1523,7 +1565,13 @@ function FraudNetwork() {
 
 function Incidents({ onNavigate }: { onNavigate: (s: Screen) => void }) {
   const [search, setSearch] = useState('')
-  const filtered = SAMPLE_INCIDENTS.filter(i =>
+  const [incidents, setIncidents] = useState(SAMPLE_INCIDENTS)
+  useEffect(() => {
+    api<Array<{ incident_reference: string; reporting_institution: string; fraud_type: string; risk_level: string; protected_reference: string; detected_at: string; status: string }>>('/incidents')
+      .then(rows => setIncidents(rows.map(i => ({ ref: i.incident_reference, institution: i.reporting_institution, type: i.fraud_type, risk: i.risk_level[0] + i.risk_level.slice(1).toLowerCase(), protectedRef: `${i.protected_reference.slice(0, 24)}…`, detectedAt: new Date(i.detected_at).toLocaleString(), status: i.status.replace(/_/g, ' '), matchStatus: 'Processing', analyst: 'Authorised user' }))))
+      .catch(() => undefined)
+  }, [])
+  const filtered = incidents.filter(i =>
     !search || i.ref.toLowerCase().includes(search.toLowerCase()) || i.type.toLowerCase().includes(search.toLowerCase())
   )
 
@@ -2612,22 +2660,21 @@ export default function App() {
     user: 'Aisha Nakato',
   })
 
-  const handleLogin = (role: Role, institution: string) => {
-    const userNames: Record<string, string> = {
-      'MTN Mobile Money Uganda Limited': 'Aisha Nakato', 'Airtel Mobile Commerce Uganda Limited': 'Bernard Okonkwo',
-      'Stanbic Bank Uganda Limited': 'Catherine Ssali', 'Centenary Rural Development Bank Limited': 'Daniel Mwanga',
-      'Bank of Uganda': 'Joy Ochieng',
-    }
+  const [connection, setConnection] = useState<'LIVE' | 'RECONNECTING' | 'OFFLINE'>('OFFLINE')
+  const handleLogin = (user: AuthUser) => {
+    const roleMap: Record<AuthUser['role'], Role> = { BOU_OVERSIGHT: 'bou-officer', FRAUD_ANALYST: 'fraud-analyst', FRAUD_SUPERVISOR: 'fraud-supervisor', COMPLIANCE: 'compliance-auditor', SYSTEM_ADMIN: 'institution-admin' }
+    const role = roleMap[user.role]
     setAppState(s => ({
-      ...s, role, institution,
-      user: userNames[institution] || 'Platform User',
+      ...s, role, institution: user.institution_name,
+      user: user.full_name,
       screen: role === 'bou-officer' ? 'bou-dashboard' : 'institution-dashboard',
     }))
-    setPhase('mfa')
+    setPhase('app')
   }
 
   const handleMFAVerify = () => { setPhase('app') }
-  const handleLogout = () => { setPhase('login') }
+  useEffect(() => phase === 'app' ? connectEvents(() => undefined, setConnection) : undefined, [phase])
+  const handleLogout = () => { clearSession(); setPhase('login'); setConnection('OFFLINE') }
   const navigate = (screen: Screen) => setAppState(s => ({ ...s, screen }))
 
   if (phase === 'login') return <LoginScreen onLogin={handleLogin} />
@@ -2661,6 +2708,7 @@ export default function App() {
       <Sidebar appState={appState} onNavigate={navigate} onLogout={handleLogout} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TopBar appState={appState} onNavigate={navigate} />
+        <div style={{ position: 'fixed', right: 18, bottom: 14, zIndex: 20, background: connection === 'LIVE' ? '#ecfdf5' : '#fff7ed', color: connection === 'LIVE' ? '#047857' : '#9a3412', border: '1px solid currentColor', borderRadius: 20, padding: '6px 10px', fontSize: 11, fontWeight: 700 }}>{connection}</div>
         <main style={{ flex: 1, overflowY: 'auto' }}>
           {renderScreen()}
         </main>
