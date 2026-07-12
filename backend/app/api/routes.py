@@ -56,6 +56,8 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(401, detail={"code": "INVALID_CREDENTIALS", "message": "Email or password is incorrect."})
     user.last_login_at = datetime.now(timezone.utc)
+    # Authentication is auditable: the event, actor, institution, and source IP are
+    # committed in the same unit of work as the last-login update.
     write_audit(db, "LOGIN", "SESSION", user.id, "User authenticated successfully.", user=user, metadata={"ip": request.client.host if request.client else None})
     db.commit()
     return {"access_token": create_access_token(user), "token_type": "bearer", "user": user_json(user)}
@@ -69,6 +71,8 @@ def me(user: User = Depends(get_current_user)) -> dict:
 @router.get("/institutions")
 def institutions(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[dict]:
     records = list(db.scalars(select(Institution).where(Institution.active.is_(True)).order_by(Institution.name)))
+    # BoU has national oversight; institution users are tenant-scoped to prevent
+    # accidental cross-institution data disclosure.
     if user.role != "BOU_OVERSIGHT":
         records = [record for record in records if record.id == user.institution_id]
     return [{"id": record.id, "code": record.code, "name": record.name, "institution_type": record.institution_type, "regulated": record.regulated, "active": record.active} for record in records]

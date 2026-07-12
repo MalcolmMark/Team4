@@ -18,17 +18,19 @@ INSTITUTIONS = [
     ("CENTENARY_UG", "Centenary Rural Development Bank Limited", "BANK"),
 ]
 
+# These are synthetic demonstration identities using the five project team names.
+# The shared demo password comes from configuration and is hashed before insertion.
 USERS = [
-    ("bou@fraudlink.demo", "Joy Ochieng", "BOU", "BOU_OVERSIGHT"),
-    ("bou.compliance@fraudlink.demo", "Sarah Nansubuga", "BOU", "COMPLIANCE"),
-    ("mtn.analyst@fraudlink.demo", "Aisha Nakato", "MTN_MOMO_UG", "FRAUD_ANALYST"),
-    ("mtn.supervisor@fraudlink.demo", "Kevin Namukasa", "MTN_MOMO_UG", "FRAUD_SUPERVISOR"),
-    ("airtel.analyst@fraudlink.demo", "Bernard Okonkwo", "AIRTEL_MONEY_UG", "FRAUD_ANALYST"),
-    ("airtel.supervisor@fraudlink.demo", "Grace Atim", "AIRTEL_MONEY_UG", "FRAUD_SUPERVISOR"),
-    ("stanbic.analyst@fraudlink.demo", "Catherine Ssali", "STANBIC_UG", "FRAUD_ANALYST"),
-    ("stanbic.compliance@fraudlink.demo", "Peter Mugisha", "STANBIC_UG", "COMPLIANCE"),
-    ("centenary.analyst@fraudlink.demo", "Daniel Mwanga", "CENTENARY_UG", "FRAUD_ANALYST"),
-    ("admin@fraudlink.demo", "System Administrator", "BOU", "SYSTEM_ADMIN"),
+    ("bou@fraudlink.demo", "Malcolm Mark Okabo", "BOU", "BOU_OVERSIGHT"),
+    ("bou.compliance@fraudlink.demo", "Esther Nampiina", "BOU", "COMPLIANCE"),
+    ("mtn.analyst@fraudlink.demo", "Daniella Mukisa", "MTN_MOMO_UG", "FRAUD_ANALYST"),
+    ("mtn.supervisor@fraudlink.demo", "Kevin Mugabi", "MTN_MOMO_UG", "FRAUD_SUPERVISOR"),
+    ("airtel.analyst@fraudlink.demo", "Gideon Maku", "AIRTEL_MONEY_UG", "FRAUD_ANALYST"),
+    ("airtel.supervisor@fraudlink.demo", "Malcolm Mark Okabo", "AIRTEL_MONEY_UG", "FRAUD_SUPERVISOR"),
+    ("stanbic.analyst@fraudlink.demo", "Esther Nampiina", "STANBIC_UG", "FRAUD_ANALYST"),
+    ("stanbic.compliance@fraudlink.demo", "Daniella Mukisa", "STANBIC_UG", "COMPLIANCE"),
+    ("centenary.analyst@fraudlink.demo", "Gideon Maku", "CENTENARY_UG", "FRAUD_ANALYST"),
+    ("admin@fraudlink.demo", "Kevin Mugabi", "BOU", "SYSTEM_ADMIN"),
 ]
 
 
@@ -37,7 +39,13 @@ def seed_database(db: Session, reset: bool = False) -> None:
         for model in [AuditEvent, Alert, FraudRelationship, Transaction, FraudSubject, FraudIncident, User, Institution]:
             db.execute(delete(model))
         db.commit()
+    # Seeding is idempotent: normal API restarts preserve operational demo data.
+    # Existing user display names are still synchronized with the team-name fixture.
     if db.scalar(select(Institution.id).limit(1)):
+        names_by_email = {email: name for email, name, _, _ in USERS}
+        for user in db.scalars(select(User).where(User.email.in_(names_by_email))):
+            user.full_name = names_by_email[user.email]
+        db.commit()
         return
     institutions = {code: Institution(code=code, name=name, institution_type=kind) for code, name, kind in INSTITUTIONS}
     db.add_all(institutions.values())
@@ -51,6 +59,8 @@ def seed_database(db: Session, reset: bool = False) -> None:
     db.flush()
 
     now = datetime.now(timezone.utc)
+    # Cross-institution correlation uses deterministic protected references rather
+    # than exposing the direct phone/account identifier in shared records.
     fraud_canonical, fraud_ref = create_protected_reference("MSISDN", "0772315500")
     _, airtel_ref = create_protected_reference("MSISDN", "0752445001")
     _, stanbic_ref = create_protected_reference("BANK_ACCOUNT", "STB-DEMO-00421")
@@ -98,4 +108,3 @@ def reset_demo_scenario(db: Session) -> None:
     db.execute(delete(Alert).where(Alert.alert_reference.like("ALT-2026-00009%")))
     db.execute(delete(FraudIncident).where(FraudIncident.incident_reference.like("FL-UG-2026-000005%")))
     db.commit()
-

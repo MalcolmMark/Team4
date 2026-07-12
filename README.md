@@ -50,22 +50,23 @@ npm run dev
 
 Open `http://localhost:5173`. API documentation is at `http://127.0.0.1:8000/docs`.
 
+The frontend calls `/api/v1` and `/ws/events`; during local development Vite proxies both to FastAPI on port 8000. For separate deployments, set `VITE_API_BASE_URL` to the public backend origin (for example `https://api.example.com`) before building the frontend. `VITE_WS_BASE_URL` is optional and defaults to the WebSocket equivalent of `VITE_API_BASE_URL`. Add the frontend origin to `CORS_ORIGINS` on the backend.
+
 For a quick local demonstration without PostgreSQL, omit `DATABASE_URL` (or set `DATABASE_URL=sqlite:///./fraudlink.db`), then run the migration and seed commands normally.
 
-## Demo accounts
+## Team 4 frontend demonstration accounts
 
-The default development password is `FraudLinkDemo2026!`; configure it with `DEMO_PASSWORD` before seeding.
+All identities and email addresses below are simulated. The frontend password is `FraudLinkDemo2026!` and the simulated MFA code is `123456`.
 
-| Account | Role | Institution |
-| --- | --- | --- |
-| `bou@fraudlink.demo` | BOU_OVERSIGHT | Bank of Uganda |
-| `mtn.analyst@fraudlink.demo` | FRAUD_ANALYST | MTN MoMo |
-| `mtn.supervisor@fraudlink.demo` | FRAUD_SUPERVISOR | MTN MoMo |
-| `airtel.analyst@fraudlink.demo` | FRAUD_ANALYST | Airtel Money |
-| `airtel.supervisor@fraudlink.demo` | FRAUD_SUPERVISOR | Airtel Money |
-| `stanbic.analyst@fraudlink.demo` | FRAUD_ANALYST | Stanbic |
+| Account | Team member | Initial role | Institution |
+| --- | --- | --- | --- |
+| `malcolm.okabo@bou.demo.ug` | Malcolm Mark Okabo | BoU Administrator; BoU Oversight Officer | Bank of Uganda |
+| `daniella.mukisa@mtn.demo.ug` | Daniella Mukisa | Fraud Analyst | MTN Mobile Money Uganda Limited |
+| `esther.nampiina@mtn.demo.ug` | Esther Nampiina | Institution Administrator | MTN Mobile Money Uganda Limited |
+| `kevin.mugabi@mtn.demo.ug` | Kevin Mugabi | Fraud Supervisor | MTN Mobile Money Uganda Limited |
+| `gideon.maku@mtn.demo.ug` | Gideon Maku | Compliance Auditor | MTN Mobile Money Uganda Limited |
 
-Ten users total are seeded across five institutions.
+The frontend stores role assignments and demonstration workflow data in one versioned localStorage repository. Reset it from **Settings → Reset Demo Data**. The FastAPI seed retains its legacy API-only accounts for backend integration tests.
 
 ## Deterministic demonstration
 
