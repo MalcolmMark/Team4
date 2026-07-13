@@ -2588,7 +2588,7 @@ function UsersRoles() {
 // ─── USSD Simulator ───────────────────────────────────────────────────────────
 
 function USSDSimulator() {
-  type UssdScreen = 'menu' | 'report-menu' | 'phone-entry' | 'block-options' | 'success' | 'status-entry' | 'status-result' | 'safety-info' | 'exit'
+  type UssdScreen = 'menu' | 'report-menu' | 'phone-entry' | 'dob-entry' | 'block-options' | 'success' | 'status-entry' | 'status-result' | 'safety-info' | 'exit'
   type ReportType = 'Unknown Transaction' | 'PIN Request' | 'SIM Swap Suspicion' | 'Stolen Phone' | 'Fraudulent Transaction'
 
   const [screen, setScreen] = useState<UssdScreen>('menu')
@@ -2599,6 +2599,7 @@ function USSDSimulator() {
   const [transactionsBlocked, setTransactionsBlocked] = useState(false)
   const [statusLookup, setStatusLookup] = useState('')
   const [error, setError] = useState('')
+  const [identityVerified, setIdentityVerified] = useState(false)
 
   const providerPrefixes: Record<string, string> = {
     '070': 'Airtel Mobile Commerce Uganda Limited',
@@ -2640,6 +2641,7 @@ function USSDSimulator() {
     setTransactionsBlocked(false)
     setStatusLookup('')
     setError('')
+    setIdentityVerified(false)
   }
 
   const setNextScreen = (nextScreen: UssdScreen) => {
@@ -2685,11 +2687,25 @@ function USSDSimulator() {
           return
         }
         setPhoneNumber(normalized)
-        return setNextScreen('block-options')
+        setIdentityVerified(false)
+        return setNextScreen(reportType === 'Stolen Phone' ? 'dob-entry' : 'block-options')
       }
+
+      case 'dob-entry':
+        if (value === '0') return setNextScreen('phone-entry')
+        if (!value) {
+          setError('Enter the account holder date of birth, or 0 to go back.')
+          return
+        }
+        setIdentityVerified(true)
+        return setNextScreen('block-options')
 
       case 'block-options':
         if (value === '0') return setNextScreen('phone-entry')
+        if (reportType === 'Stolen Phone' && !identityVerified) {
+          setError('Verify the account holder identity before continuing.')
+          return
+        }
         if (value === '1' || value === '2') {
           setTransactionsBlocked(value === '1')
           setReportRef(generateReportRef())
@@ -2740,9 +2756,15 @@ function USSDSimulator() {
           content: `${reportType}\n\nEnter the mobile money phone number linked to the affected account.\n\nThe system will detect the provider automatically.\n\n0. Back`,
           prompt: 'Phone number:',
         }
+      case 'dob-entry':
+        return {
+          content: `Verify Account Holder\n\nPhone: ${phoneNumber}\nProvider: ${provider}\n\nBefore this stolen-phone report can be submitted or transactions blocked, enter the account holder's date of birth.\n\n0. Back`,
+          prompt: 'Date of birth:',
+        }
+
       case 'block-options':
         return {
-          content: 'Provider Detected\n\nPhone: ' + phoneNumber + '\nProvider: ' + provider + '\nReport type: ' + reportType + '\n\n' + (isHighRiskReport ? 'Recommended action: block transactions immediately while the provider verifies ownership.' : 'You can block transactions if you believe money is at immediate risk.') + '\n\n1. Block all mobile money transactions\n2. Submit report without blocking\n\n0. Back',
+          content: (identityVerified ? 'Identity Verified (Demo)\n\n' : 'Provider Detected\n\n') + 'Phone: ' + phoneNumber + '\nProvider: ' + provider + '\nReport type: ' + reportType + '\n\n' + (isHighRiskReport ? 'Recommended action: block transactions immediately while the provider verifies ownership.' : 'You can block transactions if you believe money is at immediate risk.') + '\n\n1. Block all mobile money transactions\n2. Submit report without blocking\n\n0. Back',
           prompt: 'Enter choice:',
         }
       case 'success':
@@ -2785,7 +2807,7 @@ function USSDSimulator() {
       <div style={{ background: '#FFEF97', border: '1px solid #DA9133', borderRadius: 6, padding: 12, marginBottom: 24, display: 'flex', gap: 10, maxWidth: 700 }}>
         <Info size={15} color="#DA9133" style={{ flexShrink: 0, marginTop: 1 }} />
         <div style={{ fontSize: 13, color: '#5C2E0E', lineHeight: 1.5 }}>
-          <strong>Consumer protection input.</strong> A user selects the fraud scenario, enters the affected phone number, gets routed to the detected provider, and can request a temporary mobile-money transaction block while the provider verifies the case.
+          <strong>Demonstration mode.</strong> Stolen-phone reports include a date-of-birth confirmation step before the report or transaction block can be submitted. Any non-empty date is accepted in this prototype.
         </div>
       </div>
 
@@ -2852,8 +2874,8 @@ function USSDSimulator() {
               { n: 1, text: 'Customer dials *284*90# and chooses Report Suspected Fraud, status lookup, or safety information' },
               { n: 2, text: 'For a report, the customer selects Unknown Transaction, PIN Request, SIM Swap, Stolen Phone, or Fraudulent Transaction' },
               { n: 3, text: 'Customer enters the affected phone number, and the system detects the provider automatically' },
-              { n: 4, text: 'The request is routed to the detected provider for verification and action' },
-              { n: 5, text: 'Customer can request a temporary block on all mobile money transactions and is directed to the nearest service centre' },
+              { n: 4, text: 'For a stolen phone, the customer completes the demonstration date-of-birth confirmation step' },
+              { n: 5, text: 'Only a verified customer can submit the stolen-phone report or request a temporary transaction block' },
             ].map(({ n, text }) => (
               <div key={n} style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
                 <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#DA9133', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -2875,6 +2897,7 @@ function USSDSimulator() {
               Provider detection happens automatically from the submitted phone number. SIM swap and stolen-phone reports recommend immediate transaction blocking.
             </div>
           </div>
+
         </div>
       </div>
     </div>

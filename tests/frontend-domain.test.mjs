@@ -45,4 +45,11 @@ test('button audit exists and placeholder names are absent from active frontend'
   const app = read('src/App.tsx')
   assert.doesNotMatch(app, /Aisha Nakato|Joy Ochieng|A\. Nakato/)
 })
-
+test('stolen-phone reports keep a demo-only DOB confirmation gate', () => {
+  const app = read('src/App.tsx')
+  assert.match(app, /reportType === 'Stolen Phone' \? 'dob-entry'/)
+  assert.match(app, /case 'dob-entry':/)
+  assert.match(app, /setIdentityVerified\(true\)/)
+  assert.match(app, /reportType === 'Stolen Phone' && !identityVerified/)
+  assert.doesNotMatch(app, /verificationAttempts|verifyDemoDateOfBirth|Common numeric and written date formats/)
+})
