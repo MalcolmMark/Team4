@@ -11,6 +11,7 @@ export interface AuthUser {
 const TOKEN_KEY = 'fraudlink_access_token'
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const WS_BASE_URL = (import.meta.env.VITE_WS_BASE_URL || '').replace(/\/$/, '')
+export const backendConfigured = Boolean(API_BASE_URL)
 
 // sessionStorage intentionally limits the demo token to this browser tab. A production
 // deployment should prefer a Secure, HttpOnly, SameSite cookie to reduce token exposure.

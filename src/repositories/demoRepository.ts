@@ -1,7 +1,7 @@
 import { DEMO_INSTITUTIONS, DEMO_USERS } from '../data/demoUsers'
 import type { DemoState, AuditEvent } from '../domain/types'
 
-const STORAGE_KEY = 'fraudlink_team4_demo_v2'
+const STORAGE_KEY = 'fraudlink_team4_demo_v3'
 const listeners = new Set<() => void>()
 
 const cloneSeed = (): DemoState => ({
@@ -39,4 +39,3 @@ export const demoRepository = {
     return record
   },
 }
-

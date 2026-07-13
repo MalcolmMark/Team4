@@ -1,6 +1,8 @@
-# MoMo FraudLink Uganda
+# FraudLink
 
-MoMo FraudLink is a closed, synthetic fraud-intelligence exchange demonstrating how regulated Ugandan institutions can correlate protected identifiers and transaction relationships under Bank of Uganda oversight. A relationship is a risk signal—not proof that a linked customer committed fraud. The receiving institution owns the operational decision.
+FraudLink is a closed, synthetic fraud-intelligence exchange demonstrating how regulated Ugandan institutions can correlate protected identifiers and transaction relationships under Bank of Uganda oversight. A relationship is a risk signal—not proof that a linked customer committed fraud. The receiving institution owns the operational decision.
+
+> **BoU@60 Hackathon demo only.** FraudLink is not an operational Bank of Uganda service. Never send money or share passwords, OTP codes, PINs, or personal information with anyone claiming to represent this demo. Treat any such request as a suspected scam.
 
 ## Architecture
 

@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "MoMo FraudLink Uganda"
+    app_name: str = "FraudLink"
     api_prefix: str = "/api/v1"
     database_url: str = "sqlite:///./fraudlink.db"
     jwt_secret_key: str = "development-only-change-me"
@@ -28,4 +28,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

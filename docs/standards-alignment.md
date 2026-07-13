@@ -2,11 +2,11 @@
 
 ## Status and claim boundary
 
-MoMo FraudLink Uganda is a hackathon MVP designed **with reference to** relevant international standards. It has not undergone an accredited conformity assessment and must not be described as ISO certified or fully ISO compliant. Formal conformity would require organisational policies, risk treatment, evidence collection, internal audit, management review and independent assessment beyond source code.
+FraudLink is a hackathon MVP designed **with reference to** relevant international standards. It has not undergone an accredited conformity assessment and must not be described as ISO certified or fully ISO compliant. Formal conformity would require organisational policies, risk treatment, evidence collection, internal audit, management review and independent assessment beyond source code.
 
 ## Standards traceability matrix
 
-| Standard | Relevance to MoMo FraudLink | MVP implementation evidence | Production work still required |
+| Standard | Relevance to FraudLink | MVP implementation evidence | Production work still required |
 | --- | --- | --- | --- |
 | **ISO/IEC 27001:2022 — Information security management systems — Requirements** | Risk-based governance of the confidentiality, integrity and availability of fraud intelligence | JWT authentication, backend role checks, institution isolation, environment-managed secrets, auditable security events and documented limitations | Formal ISMS scope, asset/risk registers, statement of applicability, policies, control owners, internal audit and management review |
 | **ISO/IEC 27002:2022 — Information security controls** | Practical guidance for access control, cryptography, logging, secure development and incident response | Password hashing, least-privilege API authorization, deterministic keyed HMAC references, protected configuration, structured audit trail and automated tests | MFA, KMS/HSM-backed key management, rotation, central monitoring, vulnerability management, backup testing and operational procedures |
@@ -31,7 +31,7 @@ The prototype applies the following principles:
 
 ## Suggested judging statement
 
-> MoMo FraudLink is designed with reference to ISO/IEC 27001 and 27002 security controls, ISO/IEC 27701 and 29100 privacy principles, and ISO/IEC 27035 incident-management practices. It uses protected-reference matching, least-privilege institution scoping, explainable fraud signals and auditable decision workflows. This is standards-aligned prototype design, not a claim of ISO certification.
+> FraudLink is designed with reference to ISO/IEC 27001 and 27002 security controls, ISO/IEC 27701 and 29100 privacy principles, and ISO/IEC 27035 incident-management practices. It uses protected-reference matching, least-privilege institution scoping, explainable fraud signals and auditable decision workflows. This is standards-aligned prototype design, not a claim of ISO certification.
 
 ## Authoritative references
 
@@ -42,4 +42,3 @@ The prototype applies the following principles:
 - [ISO/IEC 27035-1:2023](https://www.iso.org/standard/78973.html)
 - [ISO 22301:2019](https://www.iso.org/standard/75106.html)
 - [ISO 20022](https://www.iso.org/standard/20022-1)
-

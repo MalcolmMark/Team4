@@ -1,2 +1,1 @@
-"""MoMo FraudLink backend application."""
-
+"""FraudLink backend application."""

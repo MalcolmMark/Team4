@@ -16,7 +16,7 @@ import {
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
   AreaChart, Area
 } from 'recharts'
-import { api, AuthUser, clearSession, connectEvents, token } from './lib/api'
+import { api, AuthUser, backendConfigured, clearSession, connectEvents, token } from './lib/api'
 import type { AccessSide, DemoUser, RoleAssignment, UserRole } from './auth/types'
 import { useCurrentAccess, useDemoState, usePermissions } from './auth/usePermissions'
 import { authRepository } from './repositories/authRepository'
@@ -161,27 +161,22 @@ const INDICATOR_CATALOGUE = [
 function MFLLogo({ size = 32, showText = true }: { size?: number; showText?: boolean }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M20 2L4 9v10c0 9.4 6.8 18.2 16 20.4C30.2 37.2 37 28.4 37 19V9L20 2z" fill="#DA9133" fillOpacity="0.15" stroke="#DA9133" strokeWidth="1.5"/>
-        <circle cx="20" cy="19" r="4" fill="#DA9133"/>
-        <circle cx="11" cy="14" r="2.5" fill="#FFFFFF" fillOpacity="0.8"/>
-        <circle cx="29" cy="14" r="2.5" fill="#FFFFFF" fillOpacity="0.8"/>
-        <circle cx="11" cy="26" r="2.5" fill="#FFFFFF" fillOpacity="0.8"/>
-        <circle cx="29" cy="26" r="2.5" fill="#FFFFFF" fillOpacity="0.8"/>
-        <line x1="13.2" y1="15.4" x2="17.5" y2="17.8" stroke="#DA9133" strokeWidth="1.2"/>
-        <line x1="26.8" y1="15.4" x2="22.5" y2="17.8" stroke="#DA9133" strokeWidth="1.2"/>
-        <line x1="13.2" y1="24.6" x2="17.5" y2="21.8" stroke="#DA9133" strokeWidth="1.2"/>
-        <line x1="26.8" y1="24.6" x2="22.5" y2="21.8" stroke="#DA9133" strokeWidth="1.2"/>
-        <text x="20" y="23" textAnchor="middle" fontSize="7" fontWeight="700" fill="#FFFFFF" fontFamily="Manrope, sans-serif">MFL</text>
-      </svg>
+      <img src="/assets/bou-logo.png" alt="Bank of Uganda coat of arms" width={size} height={size} style={{ objectFit: 'contain', borderRadius: 7, background: '#FFFFFF', padding: 2, flexShrink: 0 }} />
       {showText && (
         <div>
-          <div style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 800, fontSize: 15, color: '#FFFFFF', lineHeight: 1.1 }}>MoMo FraudLink</div>
-          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, color: '#FFEF97', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Uganda</div>
+          <div style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 800, fontSize: 15, color: '#FFFFFF', lineHeight: 1.1 }}>FraudLink</div>
+          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 9, color: '#FFEF97', letterSpacing: '0.04em', marginTop: 2 }}>A Product of Bank Of Uganda</div>
         </div>
       )}
     </div>
   )
+}
+
+function DemoDisclaimer({ compact = false }: { compact?: boolean }) {
+  return <div role="note" aria-label="BoU at 60 Hackathon demo disclaimer" style={{ padding: compact ? '8px 14px' : 14, background: '#FFEF97', border: '1px solid #DA9133', borderRadius: compact ? 0 : 6, display: 'flex', gap: 9, alignItems: 'flex-start' }}>
+    <AlertTriangle size={15} color="#BC2626" style={{ flexShrink: 0, marginTop: 1 }} />
+    <div style={{ fontSize: compact ? 11.5 : 12, color: '#333333', lineHeight: 1.5 }}><strong>BoU@60 Hackathon demo only.</strong> FraudLink is not an operational Bank of Uganda service. Never send money or share passwords, OTP codes, PINs, or personal information with anyone claiming to represent this demo. Treat any such request as a suspected scam.</div>
+  </div>
 }
 
 // ─── Risk / Status Badge Helpers ─────────────────────────────────────────────
@@ -301,6 +296,14 @@ function LoginScreen({ onLogin }: { onLogin: (user: DemoUser, assignment: RoleAs
   }
 
   const roleLabel = (role: UserRole) => ({ FRAUD_ANALYST: 'Fraud Analyst', FRAUD_SUPERVISOR: 'Fraud Supervisor', INSTITUTION_ADMIN: 'Institution Administrator', COMPLIANCE_AUDITOR: 'Compliance Auditor', BOU_OVERSIGHT_OFFICER: 'BoU Oversight Officer', BOU_ADMINISTRATOR: 'BoU Administrator' })[role]
+  const roleCapabilities: Record<UserRole, string> = {
+    FRAUD_ANALYST: 'Submit intelligence, investigate alerts and propose indicators.',
+    FRAUD_SUPERVISOR: 'Review analyst work, disclosure requests and schedule reports.',
+    INSTITUTION_ADMIN: 'Manage users, roles and API integrations within the selected institution only.',
+    COMPLIANCE_AUDITOR: 'Review audit activity, disclosure history and compliance reports.',
+    BOU_OVERSIGHT_OFFICER: 'View national oversight information and review regulated institutions.',
+    BOU_ADMINISTRATOR: 'Manage all demonstration users, assign BoU roles and administer institutions.',
+  }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', background: '#F8F8F8' }}>
@@ -360,15 +363,22 @@ function LoginScreen({ onLogin }: { onLogin: (user: DemoUser, assignment: RoleAs
             <div>
               <label style={{ fontSize: 12.5, fontWeight: 600, color: '#333333', display: 'block', marginBottom: 6 }}>Demonstration user</label>
               <select className="input-field" value={selectedUser?.id || ''} onChange={e => chooseUser(e.target.value)}>
-                {availableUsers.map(user => <option key={user.id} value={user.id}>{user.fullName}{user.status === 'SUSPENDED' ? ' — Suspended' : ''}</option>)}
+                {availableUsers.map(user => {
+                  const roles = user.roleAssignments.filter(role => role.accessSide === accessSide && role.status === 'ACTIVE').map(role => `${roleLabel(role.role)} at ${demo.institutions.find(item => item.id === role.institutionId)?.code}`).join(' / ')
+                  return <option key={user.id} value={user.id}>{user.fullName} — {roles}{user.status === 'SUSPENDED' ? ' — Suspended' : ''}</option>
+                })}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 12.5, fontWeight: 600, color: '#333333', display: 'block', marginBottom: 6 }}>{isBoU ? 'Bank of Uganda role' : 'Assigned role'}</label>
               <select className="input-field" value={selectedAssignment?.id || ''} onChange={e => setAssignmentId(e.target.value)} disabled={!assignments.length}>
-                {assignments.map(assignment => <option key={assignment.id} value={assignment.id}>{roleLabel(assignment.role)}</option>)}
+                {assignments.map(assignment => <option key={assignment.id} value={assignment.id}>{roleLabel(assignment.role)} — {demo.institutions.find(item => item.id === assignment.institutionId)?.name}</option>)}
               </select>
             </div>
+            {selectedAssignment && <div style={{ padding: 12, borderRadius: 6, background: '#FFEF97', borderLeft: '3px solid #DA9133' }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#333333' }}>{roleLabel(selectedAssignment.role)}</div>
+              <div style={{ marginTop: 3, fontSize: 12, color: '#555555', lineHeight: 1.5 }}>{roleCapabilities[selectedAssignment.role]}</div>
+            </div>}
             {!isBoU && <div>
               <label style={{ fontSize: 12.5, fontWeight: 600, color: '#333333', display: 'block', marginBottom: 6 }}>Assigned institution</label>
               <select className="input-field" value={selectedInstitution?.id || ''} disabled><option value={selectedInstitution?.id}>{selectedInstitution?.name}</option></select>
@@ -408,12 +418,7 @@ function LoginScreen({ onLogin }: { onLogin: (user: DemoUser, assignment: RoleAs
             </div>
           </div>
 
-          <div style={{ marginTop: 24, padding: 14, background: '#FFEF97', border: '1px solid #DA9133', borderRadius: 6, display: 'flex', gap: 10 }}>
-            <AlertTriangle size={16} color="#DA9133" style={{ flexShrink: 0, marginTop: 1 }} />
-            <div style={{ fontSize: 12, color: '#5C2E0E', lineHeight: 1.5 }}>
-              <strong>Synthetic, standards-aligned demo.</strong> References ISO/IEC 27001, 27701, 29100 and 27035 principles; no certification or production institution connection is claimed.
-            </div>
-          </div>
+          <div style={{ marginTop: 18 }}><DemoDisclaimer /></div>
         </div>
       </div>
     </div>
@@ -1215,6 +1220,7 @@ function AlertsList({ onNavigate }: { onNavigate: (s: Screen) => void }) {
   const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
+    if (!backendConfigured) return
     api<Array<{ id: number; alert_reference: string; risk_level: string; relationship_type: string; indicator_codes: string[]; reporting_institution?: string; created_at: string; status: string }>>('/alerts')
       .then(rows => setAlerts(rows.map(a => ({ id: a.id, ref: a.alert_reference, risk: a.risk_level[0] + a.risk_level.slice(1).toLowerCase(), type: a.relationship_type.replace(/_/g, ' '), matchReason: `Linked to incident reported by ${a.reporting_institution || 'another institution'}`, indicators: a.indicator_codes.length, institutions: 2, generatedAt: new Date(a.created_at).toLocaleString(), analyst: 'Unassigned', status: a.status.replace(/_/g, ' ') })) as typeof SAMPLE_ALERTS))
       .catch(error => setLoadError(error instanceof Error ? error.message : 'Alerts could not be loaded.'))
@@ -1632,6 +1638,7 @@ function Incidents({ onNavigate }: { onNavigate: (s: Screen) => void }) {
   const [search, setSearch] = useState('')
   const [incidents, setIncidents] = useState(SAMPLE_INCIDENTS)
   useEffect(() => {
+    if (!backendConfigured) return
     api<Array<{ incident_reference: string; reporting_institution: string; fraud_type: string; risk_level: string; protected_reference: string; detected_at: string; status: string }>>('/incidents')
       .then(rows => setIncidents(rows.map(i => ({ ref: i.incident_reference, institution: i.reporting_institution, type: i.fraud_type, risk: i.risk_level[0] + i.risk_level.slice(1).toLowerCase(), protectedRef: `${i.protected_reference.slice(0, 24)}…`, detectedAt: new Date(i.detected_at).toLocaleString(), status: i.status.replace(/_/g, ' '), matchStatus: 'Processing', analyst: 'Authorised user' }))))
       .catch(() => undefined)
@@ -2720,7 +2727,7 @@ function USSDSimulator() {
     switch (screen) {
       case 'menu':
         return {
-          content: 'MoMo FraudLink Uganda\n*284*90#\n\n1. Report Suspected Fraud\n2. Check Report Status\n3. Mobile Money Safety Information\n4. Exit',
+          content: 'FraudLink\n*284*90#\n\n1. Report Suspected Fraud\n2. Check Report Status\n3. Mobile Money Safety Information\n4. Exit',
           prompt: 'Enter choice:',
         }
       case 'report-menu':
@@ -2760,7 +2767,7 @@ function USSDSimulator() {
         }
       case 'exit':
         return {
-          content: 'Thank you for using MoMo FraudLink Uganda.\n\nFor urgent mobile money help, visit the nearest service centre for assistance.',
+          content: 'Thank you for using FraudLink.\n\nFor urgent mobile money help, visit the nearest service centre for assistance.',
           prompt: '',
         }
       default:
@@ -2785,22 +2792,22 @@ function USSDSimulator() {
       <div style={{ display: 'flex', gap: 40, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         {/* Phone mockup */}
         <div style={{ flexShrink: 0 }}>
-          <div style={{ width: 260, background: '#333333', borderRadius: 36, padding: 8, boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
-            <div style={{ background: '#111', borderRadius: 28, overflow: 'hidden' }}>
+          <div style={{ width: 290, background: '#4D2412', border: '3px solid #DA9133', borderRadius: 38, padding: 9, boxShadow: '0 20px 60px rgba(0,0,0,0.32)' }}>
+            <div style={{ background: '#333333', borderRadius: 28, overflow: 'hidden' }}>
               {/* Camera */}
-              <div style={{ height: 28, background: '#333333', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#333' }} />
+              <div style={{ height: 34, background: '#333333', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <div style={{ width: 42, height: 6, borderRadius: 4, background: '#929292' }} />
               </div>
               {/* Screen */}
-              <div style={{ background: '#333333', minHeight: 420, padding: 16, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ background: '#F8F8F8', minHeight: 440, padding: 14, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ flex: 1 }}>
                   {/* Signal bars */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontSize: 10, color: '#666', fontFamily: 'monospace' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10, padding: '0 3px', fontSize: 10.5, color: '#333333', fontWeight: 700, fontFamily: 'JetBrains Mono' }}>
                     <span>MTN UG</span>
                     <span>|||| 3G</span>
                     <span>84%</span>
                   </div>
-                  <div style={{ background: '#333333', borderRadius: 6, padding: 12, minHeight: 280, whiteSpace: 'pre-wrap', fontFamily: 'JetBrains Mono', fontSize: 11, color: '#FFFFFF', lineHeight: 1.7 }}>
+                  <div style={{ background: '#FFFFFF', border: '1px solid #E6E6E6', borderRadius: 8, padding: 14, minHeight: 292, whiteSpace: 'pre-wrap', fontFamily: 'JetBrains Mono', fontSize: 12.5, fontWeight: 500, color: '#333333', lineHeight: 1.65, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
                     {curr.content}
                   </div>
                   {error && (
@@ -2811,26 +2818,26 @@ function USSDSimulator() {
                 </div>
                 {curr.prompt && (
                   <div style={{ marginTop: 12 }}>
-                    <div style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: '#666', marginBottom: 4 }}>{curr.prompt}</div>
+                    <div style={{ fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, color: '#333333', marginBottom: 5 }}>{curr.prompt}</div>
                     <input
                       value={input} onChange={e => setInput(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                      style={{ width: '100%', background: '#333333', border: '1px solid #333', borderRadius: 4, padding: '6px 8px', color: '#FFFFFF', fontFamily: 'JetBrains Mono', fontSize: 12, outline: 'none', boxSizing: 'border-box' }}
+                      style={{ width: '100%', background: '#FFFFFF', border: '2px solid #DA9133', borderRadius: 5, padding: '8px 9px', color: '#333333', fontFamily: 'JetBrains Mono', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
                     />
-                    <button onClick={handleSubmit} style={{ width: '100%', marginTop: 6, background: '#DA9133', border: 'none', borderRadius: 4, padding: '7px', color: '#FFFFFF', fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'Inter' }}>
+                    <button onClick={handleSubmit} style={{ width: '100%', marginTop: 7, background: '#4D2412', border: 'none', borderRadius: 5, padding: '9px', color: '#FFFFFF', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'Inter' }}>
                       Send
                     </button>
                   </div>
                 )}
                 {canStartAgain && (
-                  <button onClick={resetSimulator} style={{ marginTop: 10, width: '100%', background: 'transparent', border: '1px solid #333', borderRadius: 4, padding: '6px', color: '#888', fontSize: 11, cursor: 'pointer', fontFamily: 'JetBrains Mono' }}>
+                  <button onClick={resetSimulator} style={{ marginTop: 10, width: '100%', background: '#FFEF97', border: '1px solid #DA9133', borderRadius: 5, padding: '8px', color: '#333333', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'JetBrains Mono' }}>
                     Start again
                   </button>
                 )}
               </div>
               {/* Home bar */}
-              <div style={{ height: 28, background: '#333333', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                <div style={{ width: 60, height: 3, borderRadius: 2, background: '#333' }} />
+              <div style={{ height: 34, background: '#333333', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <div style={{ width: 68, height: 4, borderRadius: 3, background: '#929292' }} />
               </div>
             </div>
           </div>
@@ -3002,6 +3009,7 @@ export default function App() {
       <Sidebar appState={appState} onNavigate={navigate} onLogout={handleLogout} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TopBar appState={appState} onNavigate={navigate} onSwitchRole={handleSwitchRole} onLogout={handleLogout} />
+        <DemoDisclaimer compact />
         <div style={{ position: 'fixed', right: 18, bottom: 14, zIndex: 20, background: '#FFEF97', color: connection === 'LIVE' ? '#5C2E0E' : '#555555', border: '1px solid currentColor', borderRadius: 20, padding: '6px 10px', fontSize: 11, fontWeight: 700 }}>{connection}</div>
         <main style={{ flex: 1, overflowY: 'auto' }}>
           {renderScreen()}
